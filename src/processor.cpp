@@ -169,7 +169,7 @@ struct FeatureList {
     }
 };
 
-static inline constexpr uint32_t add_feature_mask_u32(uint32_t mask, uint32_t u32idx)
+JL_UNUSED static inline constexpr uint32_t add_feature_mask_u32(uint32_t mask, uint32_t u32idx)
 {
     return mask;
 }
