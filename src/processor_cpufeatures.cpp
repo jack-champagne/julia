@@ -30,6 +30,13 @@ static const FeatureBits hw_feature_mask = {{0}};
 
 #include <cpufeatures/target_parsing.h>
 
+// Verify the cpufeatures tables were generated from a compatible LLVM version.
+// LLVM_VERSION_MAJOR comes from LLVM headers (via LLVM_CXXFLAGS in the build).
+#if defined(TARGET_TABLES_LLVM_VERSION_MAJOR) && defined(LLVM_VERSION_MAJOR)
+static_assert(TARGET_TABLES_LLVM_VERSION_MAJOR == LLVM_VERSION_MAJOR,
+    "cpufeatures tables were generated with a different LLVM major version than Julia uses");
+#endif
+
 // ============================================================================
 // Debug output (enabled via JULIA_DEBUG=cpufeatures or JULIA_DEBUG=all)
 // ============================================================================
