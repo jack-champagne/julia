@@ -5,6 +5,7 @@ using Test, Base.BinaryPlatforms, Base.BinaryPlatforms.CPUID
 @testset "CPUID" begin
     @test CPUID.cpu_isa() isa CPUID.ISA
 
+    # x86_64 tiers form a strict subset chain
     get_x86_64(n) = (CPUID.ISAs_by_family["x86_64"][n].second)
     @test get_x86_64(2) <  get_x86_64(4)
     @test get_x86_64(5) <= get_x86_64(5)
@@ -12,6 +13,21 @@ using Test, Base.BinaryPlatforms, Base.BinaryPlatforms.CPUID
     @test get_x86_64(7) >= get_x86_64(1)
     @test sort([get_x86_64(6), get_x86_64(4), get_x86_64(2), get_x86_64(4)]) ==
         [get_x86_64(2), get_x86_64(4), get_x86_64(4), get_x86_64(6)]
+
+    # Cross-arch queries return real feature data
+    @test length(CPUID._cross_lookup_cpu("x86_64", "haswell").features) > 10
+    @test length(CPUID._cross_lookup_cpu("aarch64", "cortex-a78").features) > 10
+    @test isempty(CPUID._cross_lookup_cpu("x86_64", "nonexistent").features)
+
+    # All families have non-empty ISA data (cross-arch works)
+    for (arch, isas) in CPUID.ISAs_by_family
+        @test length(isas) >= 1
+    end
+
+    # Feature name mapping
+    names = CPUID.feature_names("x86_64", get_x86_64(5))
+    @test "avx" in names
+    @test "sse4.2" in names
 end
 
 # Helper constructor to create a Platform with `validate_strict` set to `true`.

@@ -43,9 +43,55 @@ function _featurebytes_to_isa(buf::Vector{UInt8})
 end
 
 """
+    _cross_lookup_cpu(arch::String, name::String) -> ISA
+
+Look up hardware features for a CPU on any architecture using the
+cross-arch tables. Works regardless of host architecture.
+Returns an empty ISA if the CPU or architecture is not found.
+"""
+function _cross_lookup_cpu(arch::String, name::String)
+    nbytes = ccall(:jl_cpufeatures_cross_nbytes, Csize_t, (Cstring,), arch)
+    nbytes == 0 && return ISA(Set{UInt32}())
+    buf = Vector{UInt8}(undef, nbytes)
+    written = ccall(:jl_cpufeatures_cross_lookup, Csize_t,
+                    (Cstring, Cstring, Ptr{UInt8}, Csize_t),
+                    arch, name, buf, nbytes)
+    written == 0 && return ISA(Set{UInt32}())
+    return _featurebytes_to_isa(buf)
+end
+
+"""
+    _build_bit_to_name(arch::String) -> Dict{UInt32, String}
+
+Build a mapping from feature bit index to feature name for an architecture.
+"""
+function _build_bit_to_name(arch::String)
+    nfeats = ccall(:jl_cpufeatures_cross_num_features, UInt32, (Cstring,), arch)
+    result = Dict{UInt32, String}()
+    for i in 0:nfeats-1
+        name_ptr = ccall(:jl_cpufeatures_cross_feature_name, Cstring, (Cstring, UInt32), arch, i)
+        name_ptr == C_NULL && continue
+        bit = ccall(:jl_cpufeatures_cross_feature_bit, Cint, (Cstring, UInt32), arch, i)
+        bit < 0 && continue
+        result[UInt32(bit)] = unsafe_string(name_ptr)
+    end
+    return result
+end
+
+"""
+    feature_names(arch::String, isa::ISA) -> Vector{String}
+
+Return sorted feature names for the given ISA on the specified architecture.
+"""
+function feature_names(arch::String, isa::ISA)
+    mapping = _build_bit_to_name(arch)
+    return sort([get(mapping, bit, "unknown_$bit") for bit in isa.features])
+end
+
+"""
     _lookup_cpu(name::String) -> ISA
 
-Look up hardware features for the named CPU from the cpufeatures library.
+Look up hardware features for the named CPU on the host architecture.
 Returns an empty ISA if the CPU name is not found.
 """
 function _lookup_cpu(name::String)
@@ -68,48 +114,59 @@ function _host_isa()
     return _featurebytes_to_isa(buf)
 end
 
+# Build an ISA list for a given architecture family.
+# Uses cross-arch lookup so it works on any host.
+# Entries with empty cpuname get an empty ISA (generic baseline).
+function _make_isa_list(arch::String, entries::Vector{Pair{String,String}})
+    result = Pair{String,ISA}[]
+    for (label, cpuname) in entries
+        if isempty(cpuname)
+            push!(result, label => ISA(Set{UInt32}()))
+        else
+            push!(result, label => _cross_lookup_cpu(arch, cpuname))
+        end
+    end
+    return result
+end
+
 # ISA definitions per architecture family.
-# CPU names map to LLVM names in the cpufeatures database.
-# Names like "skylake_avx512" are BinaryBuilder tier labels;
-# they use dashes for the actual LLVM lookup.
-# Entries with empty string ("") use an empty feature set (generic baseline).
-#
+# CPU names are LLVM names in the cpufeatures database.
 # Keep in sync with `arch_march_isa_mapping` in binaryplatforms.jl.
 const ISAs_by_family = Dict(
-    "i686" => [
-        "pentium4" => ISA(Set{UInt32}()),
-        "prescott" => _lookup_cpu("prescott"),
-    ],
-    "x86_64" => [
-        "x86_64" => ISA(Set{UInt32}()),
-        "core2" => _lookup_cpu("core2"),
-        "nehalem" => _lookup_cpu("nehalem"),
-        "sandybridge" => _lookup_cpu("sandybridge"),
-        "haswell" => _lookup_cpu("haswell"),
-        "skylake" => _lookup_cpu("skylake"),
-        "skylake_avx512" => _lookup_cpu("skylake-avx512"),
-    ],
-    "aarch64" => [
-        "armv8.0-a" => ISA(Set{UInt32}()),
-        "armv8.1-a" => _lookup_cpu("cortex-a76"),    # representative v8.1
-        "armv8.2-a+crypto" => _lookup_cpu("cortex-a78"), # representative v8.2+crypto
-        "a64fx" => _lookup_cpu("a64fx"),
-        "apple_m1" => _lookup_cpu("apple-a14"),
-    ],
-    "armv6l" => [
-        "arm1176jzfs" => ISA(Set{UInt32}()),
-    ],
-    "armv7l" => [
-        "armv7l" => ISA(Set{UInt32}()),
-        "armv7l+neon" => ISA(Set{UInt32}()),
-        "armv7l+neon+vfpv4" => ISA(Set{UInt32}()),
-    ],
-    "riscv64" => [
-        "riscv64" => ISA(Set{UInt32}()),
-    ],
-    "powerpc64le" => [
-        "power8" => ISA(Set{UInt32}()),
-    ],
+    "i686" => _make_isa_list("x86_64", [
+        "pentium4" => "",
+        "prescott" => "prescott",
+    ]),
+    "x86_64" => _make_isa_list("x86_64", [
+        "x86_64" => "",
+        "core2" => "core2",
+        "nehalem" => "nehalem",
+        "sandybridge" => "sandybridge",
+        "haswell" => "haswell",
+        "skylake" => "skylake",
+        "skylake_avx512" => "skylake-avx512",
+    ]),
+    "aarch64" => _make_isa_list("aarch64", [
+        "armv8.0-a" => "",
+        "armv8.1-a" => "cortex-a76",
+        "armv8.2-a+crypto" => "cortex-a78",
+        "a64fx" => "a64fx",
+        "apple_m1" => "apple-a14",
+    ]),
+    "armv6l" => _make_isa_list("aarch64", [
+        "arm1176jzfs" => "",
+    ]),
+    "armv7l" => _make_isa_list("aarch64", [
+        "armv7l" => "",
+        "armv7l+neon" => "",
+        "armv7l+neon+vfpv4" => "",
+    ]),
+    "riscv64" => _make_isa_list("riscv64", [
+        "riscv64" => "",
+    ]),
+    "powerpc64le" => _make_isa_list("powerpc64le", [
+        "power8" => "",
+    ]),
 )
 
 # Test a CPU feature exists on the currently-running host

@@ -29,6 +29,7 @@ static const FeatureBits hw_feature_mask = {{0}};
 #endif
 
 #include <cpufeatures/target_parsing.h>
+#include <cpufeatures/cross_arch.h>
 
 // Verify the cpufeatures tables were generated from a compatible LLVM version.
 // LLVM_VERSION_MAJOR comes from LLVM headers (via LLVM_CXXFLAGS in the build).
@@ -735,6 +736,59 @@ extern "C" JL_DLLEXPORT void jl_cpufeatures_host(uint8_t *features_out, size_t b
     for (int i = 0; i < TARGET_FEATURE_WORDS; i++)
         fb.bits[i] &= hw_feature_mask.bits[i];
     memcpy(features_out, &fb, sizeof(FeatureBits));
+}
+
+// ============================================================================
+// Cross-architecture CPU/feature queries (for BinaryPlatforms)
+// ============================================================================
+
+// Look up a CPU's hw features on any architecture.
+// Returns the number of bytes written, or 0 if not found.
+extern "C" JL_DLLEXPORT size_t jl_cpufeatures_cross_lookup(
+        const char *arch, const char *cpu_name,
+        uint8_t *features_out, size_t bufsize)
+{
+    tp::CrossFeatureBits fb;
+    if (!tp::cross_lookup_cpu(arch, cpu_name, fb))
+        return 0;
+    size_t nbytes = fb.num_words * sizeof(uint64_t);
+    if (bufsize < nbytes)
+        return 0;
+    memcpy(features_out, fb.bits, nbytes);
+    return nbytes;
+}
+
+// Get the number of feature bytes for an architecture.
+extern "C" JL_DLLEXPORT size_t jl_cpufeatures_cross_nbytes(const char *arch)
+{
+    return tp::cross_feature_words(arch) * sizeof(uint64_t);
+}
+
+// Get number of features/CPUs for an architecture.
+extern "C" JL_DLLEXPORT unsigned jl_cpufeatures_cross_num_features(const char *arch)
+{
+    return tp::cross_num_features(arch);
+}
+
+extern "C" JL_DLLEXPORT unsigned jl_cpufeatures_cross_num_cpus(const char *arch)
+{
+    return tp::cross_num_cpus(arch);
+}
+
+// Get feature name/bit by index.
+extern "C" JL_DLLEXPORT const char *jl_cpufeatures_cross_feature_name(const char *arch, unsigned idx)
+{
+    return tp::cross_feature_name(arch, idx);
+}
+
+extern "C" JL_DLLEXPORT int jl_cpufeatures_cross_feature_bit(const char *arch, unsigned idx)
+{
+    return tp::cross_feature_bit_at(arch, idx);
+}
+
+extern "C" JL_DLLEXPORT const char *jl_cpufeatures_cross_cpu_name(const char *arch, unsigned idx)
+{
+    return tp::cross_cpu_name(arch, idx);
 }
 
 // ============================================================================
