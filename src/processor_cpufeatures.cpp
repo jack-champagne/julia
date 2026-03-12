@@ -49,9 +49,7 @@ static bool cpufeatures_debug_enabled() {
 static std::string debug_feature_str(const FeatureList<TARGET_FEATURE_WORDS * 2> &features) {
     FeatureBits fb;
     memcpy(&fb, &features, sizeof(fb));
-    char buf[4096];
-    tp_build_feature_string(&fb, nullptr, buf, sizeof(buf));
-    return std::string(buf);
+    return tp::build_feature_string(fb);
 }
 
 // ============================================================================
@@ -113,15 +111,13 @@ static const FeatureList<feature_sz> feature_masks = compute_feature_masks();
 
 static inline const std::string &host_cpu_name()
 {
-    static std::string name = tp_get_host_cpu_name();
-    return name;
+    return tp::get_host_cpu_name();
 }
 
 static inline const std::pair<uint32_t, FeatureList<feature_sz>> &get_host_cpu()
 {
     static auto host = [] {
-        FeatureBits fb;
-        tp_get_host_features(&fb);
+        auto fb = tp::get_host_features();
         FeatureList<feature_sz> fl = {};
         featurebits_to_list(fb, fl);
         return std::make_pair(uint32_t(0), fl);
@@ -132,11 +128,8 @@ static inline const std::pair<uint32_t, FeatureList<feature_sz>> &get_host_cpu()
 // Get host CPU feature string for Julia
 static std::string get_host_feature_string()
 {
-    FeatureBits fb;
-    tp_get_host_features(&fb);
-    char buf[4096];
-    tp_build_feature_string(&fb, nullptr, buf, sizeof(buf));
-    return std::string(buf);
+    auto fb = tp::get_host_features();
+    return tp::build_feature_string(fb);
 }
 
 // ============================================================================
@@ -730,8 +723,7 @@ extern "C" JL_DLLEXPORT void jl_cpufeatures_host(uint8_t *features_out, size_t b
 {
     if (bufsize < sizeof(FeatureBits))
         return;
-    FeatureBits fb;
-    tp_get_host_features(&fb);
+    auto fb = tp::get_host_features();
     // Mask to hardware features
     for (int i = 0; i < TARGET_FEATURE_WORDS; i++)
         fb.bits[i] &= hw_feature_mask.bits[i];
