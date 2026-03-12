@@ -10,8 +10,8 @@ export cpu_isa
 A structure which represents the Instruction Set Architecture (ISA) of a
 computer.  It holds the `Set` of features of the CPU.
 
-The numerical values of the features are automatically generated from the C
-source code of Julia and stored in the `features_h.jl` Julia file.
+Feature bit indices come from the cpufeatures library's generated tables
+(extracted from LLVM's TableGen data at build time).
 """
 struct ISA
     features::Set{UInt32}
@@ -23,54 +23,92 @@ Base.isless(a::ISA,  b::ISA) = a < b
 
 include(string(Base.BUILDROOT, "features_h.jl"))  # include($BUILDROOT/base/features_h.jl)
 
-# Keep in sync with `arch_march_isa_mapping`.
+"""
+    _featurebytes_to_isa(buf::Vector{UInt8}) -> ISA
+
+Convert a raw feature byte buffer (from cpufeatures) into an ISA.
+"""
+function _featurebytes_to_isa(buf::Vector{UInt8})
+    features = Set{UInt32}()
+    for byte_idx in 0:length(buf)-1
+        b = buf[byte_idx + 1]
+        b == 0 && continue
+        for bit in 0:7
+            if (b >> bit) & 1 != 0
+                push!(features, UInt32(byte_idx * 8 + bit))
+            end
+        end
+    end
+    return ISA(features)
+end
+
+"""
+    _lookup_cpu(name::String) -> ISA
+
+Look up hardware features for the named CPU from the cpufeatures library.
+Returns an empty ISA if the CPU name is not found.
+"""
+function _lookup_cpu(name::String)
+    nbytes = ccall(:jl_cpufeatures_nbytes, Csize_t, ())
+    buf = Vector{UInt8}(undef, nbytes)
+    ret = ccall(:jl_cpufeatures_lookup, Cint, (Cstring, Ptr{UInt8}, Csize_t), name, buf, nbytes)
+    ret != 0 && return ISA(Set{UInt32}())
+    return _featurebytes_to_isa(buf)
+end
+
+"""
+    _host_isa() -> ISA
+
+Get the hardware features of the host CPU from the cpufeatures library.
+"""
+function _host_isa()
+    nbytes = ccall(:jl_cpufeatures_nbytes, Csize_t, ())
+    buf = Vector{UInt8}(undef, nbytes)
+    ccall(:jl_cpufeatures_host, Cvoid, (Ptr{UInt8}, Csize_t), buf, nbytes)
+    return _featurebytes_to_isa(buf)
+end
+
+# ISA definitions per architecture family.
+# CPU names map to LLVM names in the cpufeatures database.
+# Names like "skylake_avx512" are BinaryBuilder tier labels;
+# they use dashes for the actual LLVM lookup.
+# Entries with empty string ("") use an empty feature set (generic baseline).
+#
+# Keep in sync with `arch_march_isa_mapping` in binaryplatforms.jl.
 const ISAs_by_family = Dict(
     "i686" => [
-        # Source: https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html.
-        # Implicit in all sets, because always required by Julia: mmx, sse, sse2
         "pentium4" => ISA(Set{UInt32}()),
-        "prescott" => ISA(Set((JL_X86_sse3,))),
+        "prescott" => _lookup_cpu("prescott"),
     ],
     "x86_64" => [
-        # Source: https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html.
-        # Implicit in all sets, because always required by x86-64 architecture: mmx, sse, sse2
         "x86_64" => ISA(Set{UInt32}()),
-        "core2" => ISA(Set((JL_X86_sse3, JL_X86_ssse3))),
-        "nehalem" => ISA(Set((JL_X86_sse3, JL_X86_ssse3, JL_X86_sse41, JL_X86_sse42, JL_X86_popcnt))),
-        "sandybridge" => ISA(Set((JL_X86_sse3, JL_X86_ssse3, JL_X86_sse41, JL_X86_sse42, JL_X86_popcnt, JL_X86_avx, JL_X86_aes, JL_X86_pclmul))),
-        "haswell" => ISA(Set((JL_X86_movbe, JL_X86_sse3, JL_X86_ssse3, JL_X86_sse41, JL_X86_sse42, JL_X86_popcnt, JL_X86_avx, JL_X86_avx2, JL_X86_aes, JL_X86_pclmul, JL_X86_fsgsbase, JL_X86_rdrnd, JL_X86_fma, JL_X86_bmi, JL_X86_bmi2, JL_X86_f16c))),
-        "skylake" => ISA(Set((JL_X86_movbe, JL_X86_sse3, JL_X86_ssse3, JL_X86_sse41, JL_X86_sse42, JL_X86_popcnt, JL_X86_avx, JL_X86_avx2, JL_X86_aes, JL_X86_pclmul, JL_X86_fsgsbase, JL_X86_rdrnd, JL_X86_fma, JL_X86_bmi, JL_X86_bmi2, JL_X86_f16c, JL_X86_rdseed, JL_X86_adx, JL_X86_prfchw, JL_X86_clflushopt, JL_X86_xsavec, JL_X86_xsaves))),
-        "skylake_avx512" => ISA(Set((JL_X86_movbe, JL_X86_sse3, JL_X86_ssse3, JL_X86_sse41, JL_X86_sse42, JL_X86_popcnt, JL_X86_pku, JL_X86_avx, JL_X86_avx2, JL_X86_aes, JL_X86_pclmul, JL_X86_fsgsbase, JL_X86_rdrnd, JL_X86_fma, JL_X86_bmi, JL_X86_bmi2, JL_X86_f16c, JL_X86_rdseed, JL_X86_adx, JL_X86_prfchw, JL_X86_clflushopt, JL_X86_xsavec, JL_X86_xsaves, JL_X86_avx512f, JL_X86_clwb, JL_X86_avx512vl, JL_X86_avx512bw, JL_X86_avx512dq, JL_X86_avx512cd))),
+        "core2" => _lookup_cpu("core2"),
+        "nehalem" => _lookup_cpu("nehalem"),
+        "sandybridge" => _lookup_cpu("sandybridge"),
+        "haswell" => _lookup_cpu("haswell"),
+        "skylake" => _lookup_cpu("skylake"),
+        "skylake_avx512" => _lookup_cpu("skylake-avx512"),
+    ],
+    "aarch64" => [
+        "armv8.0-a" => ISA(Set{UInt32}()),
+        "armv8.1-a" => _lookup_cpu("cortex-a76"),    # representative v8.1
+        "armv8.2-a+crypto" => _lookup_cpu("cortex-a78"), # representative v8.2+crypto
+        "a64fx" => _lookup_cpu("a64fx"),
+        "apple_m1" => _lookup_cpu("apple-a14"),
     ],
     "armv6l" => [
-        # The only armv6l processor we know of that runs Julia on armv6l
-        # We don't have a good way to tell the different armv6l variants apart through features,
-        # and honestly we don't care much since it's basically this one chip that people want to use with Julia.
         "arm1176jzfs" => ISA(Set{UInt32}()),
     ],
     "armv7l" => [
         "armv7l" => ISA(Set{UInt32}()),
-        "armv7l+neon" => ISA(Set((JL_AArch32_neon,))),
-        "armv7l+neon+vfpv4" => ISA(Set((JL_AArch32_neon, JL_AArch32_vfp4))),
-    ],
-    "aarch64" => [
-        # Implicit in all sets, because always required: fp, asimd
-        "armv8.0-a" => ISA(Set{UInt32}()),
-        "armv8.1-a" => ISA(Set((JL_AArch64_v8_1a, JL_AArch64_lse, JL_AArch64_crc, JL_AArch64_rdm))),
-        "armv8.2-a+crypto" => ISA(Set((JL_AArch64_v8_2a, JL_AArch64_lse, JL_AArch64_crc, JL_AArch64_rdm, JL_AArch64_aes, JL_AArch64_sha2))),
-        "a64fx" => ISA(Set((JL_AArch64_v8_2a, JL_AArch64_lse, JL_AArch64_crc, JL_AArch64_rdm, JL_AArch64_sha2, JL_AArch64_ccpp, JL_AArch64_complxnum, JL_AArch64_fullfp16, JL_AArch64_sve))),
-        "apple_m1" => ISA(Set((JL_AArch64_v8_5a, JL_AArch64_lse, JL_AArch64_crc, JL_AArch64_rdm, JL_AArch64_aes, JL_AArch64_sha2, JL_AArch64_sha3, JL_AArch64_ccpp, JL_AArch64_complxnum, JL_AArch64_fp16fml, JL_AArch64_fullfp16, JL_AArch64_dotprod, JL_AArch64_rcpc, JL_AArch64_altnzcv))),
+        "armv7l+neon" => ISA(Set{UInt32}()),
+        "armv7l+neon+vfpv4" => ISA(Set{UInt32}()),
     ],
     "riscv64" => [
         "riscv64" => ISA(Set{UInt32}()),
     ],
     "powerpc64le" => [
-        # We have no way to test powerpc64le features yet, so we're only going to declare the lowest ISA:
         "power8" => ISA(Set{UInt32}()),
-    ],
-    "riscv64" => [
-        # We have no way to test riscv64 features yet, so we're only going to declare the lowest ISA:
-        "riscv64" => ISA(Set{UInt32}()),
     ],
 )
 
@@ -96,27 +134,13 @@ function normalize_arch(arch::String)
     return arch
 end
 
-let
-    # Collect all relevant features for the current architecture, if any.
-    FEATURES = UInt32[]
-    arch = normalize_arch(String(Sys.ARCH))
-    if arch in keys(ISAs_by_family)
-        for isa in ISAs_by_family[arch]
-            unique!(append!(FEATURES, last(isa).features))
-        end
-    end
-
-    # Use `@eval` to inline the list of features.
-    @eval function cpu_isa()
-        return ISA(Set{UInt32}(feat for feat in $(FEATURES) if test_cpu_feature(feat)))
-    end
-end
-
 """
     cpu_isa()
 
 Return the [`ISA`](@ref) (instruction set architecture) of the current CPU.
 """
-cpu_isa
+function cpu_isa()
+    return _host_isa()
+end
 
 end # module CPUID

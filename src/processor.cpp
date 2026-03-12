@@ -964,12 +964,12 @@ static inline void dump_cpu_spec(uint32_t cpu, const FeatureList<n> &features,
 
 }
 
-static std::string jl_get_cpu_name_llvm(void)
+JL_UNUSED static std::string jl_get_cpu_name_llvm(void)
 {
     return llvm::sys::getHostCPUName().str();
 }
 
-static std::string jl_get_cpu_features_llvm(void)
+JL_UNUSED static std::string jl_get_cpu_features_llvm(void)
 {
 #if JL_LLVM_VERSION >= 190000
     auto HostFeatures = llvm::sys::getHostCPUFeatures();
@@ -992,19 +992,7 @@ static std::string jl_get_cpu_features_llvm(void)
     return attr;
 }
 
-#if defined(_CPU_X86_) || defined(_CPU_X86_64_)
-
-#include "processor_x86.cpp"
-
-#elif defined(_CPU_AARCH64_) || defined(_CPU_ARM_)
-
-#include "processor_arm.cpp"
-
-#else
-
-#include "processor_fallback.cpp"
-
-#endif
+#include "processor_cpufeatures.cpp"
 
 // Global variable to store the CPU target string used for the sysimage
 static std::string sysimage_cpu_target;
@@ -1016,7 +1004,7 @@ JL_DLLEXPORT jl_value_t *jl_get_cpu_name(void)
 
 JL_DLLEXPORT jl_value_t *jl_get_cpu_features(void)
 {
-    return jl_cstr_to_string(jl_get_cpu_features_llvm().c_str());
+    return jl_cstr_to_string(get_host_feature_string().c_str());
 }
 
 extern "C" JL_DLLEXPORT jl_value_t* jl_reflect_clone_targets() {

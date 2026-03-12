@@ -45,19 +45,9 @@ enum {
     JL_TARGET_CLONE_BFLOAT16 = 1 << 10,
 };
 
-#define JL_FEATURE_DEF_NAME(name, bit, llvmver, str) JL_FEATURE_DEF(name, bit, llvmver)
-typedef enum {
-#define JL_FEATURE_DEF(name, bit, llvmver) JL_X86_##name = bit,
-#include "features_x86.h"
-#undef JL_FEATURE_DEF
-#define JL_FEATURE_DEF(name, bit, llvmver) JL_AArch32_##name = bit,
-#include "features_aarch32.h"
-#undef JL_FEATURE_DEF
-#define JL_FEATURE_DEF(name, bit, llvmver) JL_AArch64_##name = bit,
-#include "features_aarch64.h"
-#undef JL_FEATURE_DEF
-} jl_cpu_feature_t;
-#undef JL_FEATURE_DEF_NAME
+// Feature indices come from the cpufeatures library's generated tables.
+// The actual constants are defined in base/features_h.jl (auto-generated).
+typedef uint32_t jl_cpu_feature_t;
 
 JL_DLLEXPORT int jl_test_cpu_feature(jl_cpu_feature_t feature);
 

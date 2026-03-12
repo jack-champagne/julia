@@ -1,0 +1,7 @@
+# -*- makefile -*-
+
+## source build
+CPUFEATURES_VER := 0.1.0
+CPUFEATURES_GIT_URL := https://github.com/gbaraldi/cpufeatures.git
+CPUFEATURES_TAR_URL := https://github.com/gbaraldi/cpufeatures/archive/refs/heads/main.tar.gz
+CPUFEATURES_SHA := main
