@@ -19,7 +19,7 @@ checksum-cpufeatures: $(SRCCACHE)/cpufeatures-$(CPUFEATURES_VER).tar.gz
 $(CPUFEATURES_SRC_DIR)/build-compiled: $(CPUFEATURES_SRC_DIR)/source-extracted
 	$(MAKE) -C $(CPUFEATURES_SRC_DIR) lib \
 		CXX="$(CXX)" \
-		CXXFLAGS="$(CXXFLAGS) $(fPIC) -O2" \
+		CXXFLAGS="$(JCXXFLAGS) -O2" \
 		ARCH=$(ARCH)
 	echo 1 > $@
 
