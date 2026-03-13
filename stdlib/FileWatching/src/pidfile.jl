@@ -154,7 +154,15 @@ function parse_pidfile(io::IO)
     pid = tryparse(Cuint, fields[1])
     pid === nothing && (pid = Cuint(0))
     hostname = (length(fields) == 2) ? fields[2] : ""
-    when = mtime(io)
+    when = try
+        mtime(io)
+    catch ex
+        if ex isa IOError || ex isa MethodError
+            time()
+        else
+            rethrow()
+        end
+    end
     age = time() - when
     return (pid, hostname, age)
 end

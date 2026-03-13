@@ -55,6 +55,11 @@ end
     @test host == host2
     @test age ≈ age2 atol=5
 
+    pid2, host2, age2 = parse_pidfile(IOBuffer(""))
+    @test pid == pid2
+    @test host == host2
+    @test age2 ≈ 0 atol=1
+
     host = " host\r\n"
     write(buf, "-1 $host")
     pid2, host2, age2 = parse_pidfile(MemoryFile(seekstart(buf), time() - age))
