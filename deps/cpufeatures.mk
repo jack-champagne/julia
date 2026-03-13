@@ -26,8 +26,7 @@ $(CPUFEATURES_SRC_DIR)/build-compiled: $(CPUFEATURES_SRC_DIR)/source-extracted
 define CPUFEATURES_INSTALL
 	mkdir -p $2/$$(build_includedir)/cpufeatures
 	mkdir -p $2/$$(build_libdir)
-	cp $1/include/target_parsing.h $2/$$(build_includedir)/cpufeatures/
-	cp $1/include/cross_arch.h $2/$$(build_includedir)/cpufeatures/
+	cp $1/include/*.h $2/$$(build_includedir)/cpufeatures/
 	cp $1/generated/target_tables_*.h $2/$$(build_includedir)/cpufeatures/
 	cp $1/build/libtarget_parsing.a $2/$$(build_libdir)/
 endef
