@@ -346,6 +346,19 @@ function peakflops(n::Integer=4096; eltype::DataType=Float64, ntrials::Integer=3
     end
 end
 
+function _with_temporary_project(f::Function, load_path::Vector{String}, active_project)
+    old_load_path = copy(LOAD_PATH)
+    old_active_project = Base.ACTIVE_PROJECT[]
+    try
+        append!(empty!(LOAD_PATH), load_path)
+        Base.ACTIVE_PROJECT[] = active_project
+        return f()
+    finally
+        append!(empty!(LOAD_PATH), old_load_path)
+        Base.ACTIVE_PROJECT[] = old_active_project
+    end
+end
+
 function report_bug(kind)
     @info "Loading BugReporting package..."
     BugReportingId = Base.PkgId(
@@ -357,16 +370,11 @@ function report_bug(kind)
         let Pkg = Base.require_stdlib(Base.PkgId(
             Base.UUID((0x44cfe95a_1eb2_52ea,0xb672_e2afdf69b78f)), "Pkg"))
             mktempdir() do tmp
-                old_load_path = copy(LOAD_PATH)
-                push!(empty!(LOAD_PATH), joinpath(tmp, "Project.toml"))
-                old_active_project = Base.ACTIVE_PROJECT[]
-                Base.ACTIVE_PROJECT[] = nothing
-                pkgspec = @invokelatest Pkg.PackageSpec(BugReportingId.name, BugReportingId.uuid)
-                @invokelatest Pkg.add(pkgspec)
-                _BugReporting = Base.require(BugReportingId)
-                append!(empty!(LOAD_PATH), old_load_path)
-                Base.ACTIVE_PROJECT[] = old_active_project
-                _BugReporting
+                _with_temporary_project([joinpath(tmp, "Project.toml")], nothing) do
+                    pkgspec = @invokelatest Pkg.PackageSpec(BugReportingId.name, BugReportingId.uuid)
+                    @invokelatest Pkg.add(pkgspec)
+                    Base.require(BugReportingId)
+                end
             end
         end
     else

@@ -884,6 +884,19 @@ end
     @test ms[1].name === :B41010
 end
 
+@testset "report_bug environment restoration" begin
+    old_load_path = copy(LOAD_PATH)
+    old_active_project = Base.ACTIVE_PROJECT[]
+    err = ErrorException("sentinel")
+    @test_throws err InteractiveUtils._with_temporary_project([tempname()], nothing) do
+        @test LOAD_PATH != old_load_path
+        @test Base.ACTIVE_PROJECT[] === nothing
+        throw(err)
+    end
+    @test LOAD_PATH == old_load_path
+    @test Base.ACTIVE_PROJECT[] === old_active_project
+end
+
 # macro options should accept both literals and variables
 let
     opt = false
