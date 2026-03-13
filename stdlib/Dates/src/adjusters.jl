@@ -193,7 +193,7 @@ struct DateFunction
         return new(f)
     end
 end
-Base.show(io::IO, df::DateFunction) = println(io, df.f)
+Base.show(io::IO, df::DateFunction) = print(io, df.f)
 
 # Core adjuster
 function adjust(df::DateFunction, start, step, limit)

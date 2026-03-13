@@ -346,6 +346,7 @@ end
     @test_throws MethodError filter((x, y)->x + y, Dates.Date(2013):Dates.Day(1):Dates.Date(2014))
     @test_throws MethodError Dates.DateFunction((x, y)->x + y, Date(0))
     @test_throws ArgumentError Dates.DateFunction((dt)->2, Date(0))
+    @test !endswith(repr(Dates.DateFunction(Dates.ismonday, Date(0))), "\n")
     @test length(filter(x->true, Dates.Date(2013):Dates.Day(1):Dates.Date(2013, 2))) == 32
     @test length(filter(x->true, Dates.Date(2013):Dates.Day(1):Dates.Date(2013, 1, 1))) == 1
     @test length(filter(x->true, Dates.Date(2013):Dates.Day(1):Dates.Date(2013, 1, 2))) == 2
