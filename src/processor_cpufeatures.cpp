@@ -292,14 +292,6 @@ static void compute_clone_flags(llvm::SmallVector<TargetData<feature_sz>, 0> &ta
         };
 
 #if defined(_CPU_X86_64_) || defined(_CPU_X86_)
-        // KNL/KNM special case
-        if (!(t.dis.flags & JL_TARGET_CLONE_ALL)) {
-            if ((t.name == "knl" || t.name == "knm") &&
-                targets[t.base].name != "knl" && targets[t.base].name != "knm") {
-                t.en.flags |= JL_TARGET_CLONE_ALL;
-                continue;
-            }
-        }
         // Math cloning (FMA)
         if (check_feature("fma") || check_feature("fma4"))
             t.en.flags |= JL_TARGET_CLONE_MATH;
