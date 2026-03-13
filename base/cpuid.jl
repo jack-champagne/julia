@@ -79,10 +79,27 @@ function _build_bit_to_name(arch::String)
 end
 
 """
+    feature_names(arch::String, cpu::String) -> Vector{String}
     feature_names(arch::String, isa::ISA) -> Vector{String}
+    feature_names(isa::ISA) -> Vector{String}
+    feature_names() -> Vector{String}
 
-Return sorted feature names for the given ISA on the specified architecture.
+Return sorted hardware feature names. Can query by CPU name (on any
+architecture) or by ISA. Defaults to the host architecture and CPU.
+
+# Examples
+```julia
+feature_names()                           # host CPU features
+feature_names("x86_64", "haswell")        # haswell's features
+feature_names("aarch64", "cortex-x925")   # cross-arch query
+```
 """
+feature_names() = feature_names(string(Sys.ARCH), _host_isa())
+feature_names(isa::ISA) = feature_names(string(Sys.ARCH), isa)
+function feature_names(arch::String, cpu::String)
+    isa = _cross_lookup_cpu(arch, cpu)
+    return feature_names(arch, isa)
+end
 function feature_names(arch::String, isa::ISA)
     mapping = _build_bit_to_name(arch)
     return sort([get(mapping, bit, "unknown_$bit") for bit in isa.features])
