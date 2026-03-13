@@ -488,44 +488,46 @@ end
 Base.unsafe_store!(cglobal(:jl_libdl_dlopen_func, Any), dlopen)
 
 function dlopen(ll::LazyLibrary, flags::Integer = ll.flags; kwargs...)
-    handle = @atomic :acquire ll.handle
-    if handle == C_NULL
-        @lock ll.lock begin
-            # Check to see if another thread has already run this
-            if ll.handle == C_NULL
-                # Ensure that all dependencies are loaded
-                for dep in ll.dependencies()
-                    dlopen(dep; kwargs...)
-                end
+    while true
+        handle = @atomic :acquire ll.handle
+        if handle == C_NULL
+            @lock ll.lock begin
+                # Check to see if another thread has already run this
+                handle = @atomic :acquire ll.handle
+                if handle == C_NULL
+                    # Ensure that all dependencies are loaded
+                    for dep in ll.dependencies()
+                        dlopen(dep; kwargs...)
+                    end
 
-                # Load our library
-                handle = dlopen(string(ll.path), flags; kwargs...)
-                @atomic :release ll.handle = handle
+                    # Load our library and publish the handle before the callback,
+                    # so callback code can use the library itself.
+                    handle = dlopen(string(ll.path), flags; kwargs...)
+                    @atomic :release ll.handle = handle
 
-                # Only the thread that loaded the library calls the `on_load_callback()`.
-                if ll.on_load_callback !== nothing
-                    ll.on_load_callback()
+                    # Only the thread that loaded the library calls the `on_load_callback()`.
+                    if ll.on_load_callback !== nothing
+                        try
+                            ll.on_load_callback()
+                        catch
+                            @atomic :release ll.handle = Ptr{Cvoid}(C_NULL)
+                            dlclose(handle)
+                            rethrow()
+                        end
+                    end
                 end
-            else
-                # Another thread loaded the library while we were waiting
+            end
+        elseif ll.on_load_callback !== nothing
+            # This empty lock protects against the case where another thread has
+            # updated `ll.handle` but not yet finished the callback. Reload the
+            # handle afterward in case that callback failed and rolled it back.
+            @lock ll.lock begin
                 handle = @atomic :acquire ll.handle
             end
         end
-    else
-        # Invoke our on load callback, if it exists
-        if ll.on_load_callback !== nothing
-            # This empty lock protects against the case where we have updated
-            # `ll.handle` in the branch above, but not exited the lock.  We want
-            # a second thread that comes in at just the wrong time to have to wait
-            # for that lock to be released (and thus for the on_load_callback to
-            # have finished), hence the empty lock here. But we want the
-            # on_load_callback thread to bypass this, which will be happen thanks
-            # to the fact that we're using a reentrant lock here.
-            @lock ll.lock begin end
-        end
-    end
 
-    return handle
+        handle != C_NULL && return handle
+    end
 end
 dlopen(x::Any) = throw(TypeError(:dlopen, "", Union{Symbol,String,LazyLibrary}, x))
 dlsym(ll::LazyLibrary, args...; kwargs...) = dlsym(dlopen(ll), args...; kwargs...)

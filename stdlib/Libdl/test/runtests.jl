@@ -354,6 +354,18 @@ end
     @assert all(h -> h == handles[1], handles) "Handles were not all equal"
     """
     @test success(run(`$(Base.julia_cmd()) -t4 -e $script $lclf_path`))
+
+    # Failed on-load callbacks must roll back the cached handle and retry on the next load.
+    let callbacks = Ref(0)
+        ll = LazyLibrary(lclf_path; on_load_callback = () -> begin
+            callbacks[] += 1
+            callbacks[] == 1 && error("boom")
+        end)
+        @test_throws ErrorException dlopen(ll)
+        @test ll.handle == C_NULL
+        @test dlopen(ll) != C_NULL
+        @test callbacks[] == 2
+    end
 end
 
 @testset "Docstrings" begin
