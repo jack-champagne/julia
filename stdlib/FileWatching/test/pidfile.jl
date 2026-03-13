@@ -16,6 +16,9 @@ end
 Base.pipe_reader(io::MemoryFile) = io.io
 Base.Filesystem.mtime(io::MemoryFile) = io.mtime
 
+struct BrokenReadIO <: IO end
+Base.read(::BrokenReadIO, ::Type{String}) = throw(EOFError())
+
 # set the process umask so we can test the behavior of
 # open mask without interference from parent's state
 # and create a test environment temp directory
@@ -56,6 +59,11 @@ end
     @test age ≈ age2 atol=5
 
     pid2, host2, age2 = parse_pidfile(IOBuffer(""))
+    @test pid == pid2
+    @test host == host2
+    @test age2 ≈ 0 atol=1
+
+    pid2, host2, age2 = parse_pidfile(BrokenReadIO())
     @test pid == pid2
     @test host == host2
     @test age2 ≈ 0 atol=1

@@ -150,7 +150,16 @@ Attempt to parse our pidfile format,
 replaced an element with (0, "", 0.0), respectively, for any read that failed.
 """
 function parse_pidfile(io::IO)
-    fields = split(read(io, String), ' ', limit = 2)
+    data = try
+        read(io, String)
+    catch ex
+        if ex isa EOFError || ex isa IOError
+            ""
+        else
+            rethrow()
+        end
+    end
+    fields = split(data, ' ', limit = 2)
     pid = tryparse(Cuint, fields[1])
     pid === nothing && (pid = Cuint(0))
     hostname = (length(fields) == 2) ? fields[2] : ""
