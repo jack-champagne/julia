@@ -3,5 +3,5 @@
 ## source build
 CPUFEATURES_VER := 0.2.0
 CPUFEATURES_GIT_URL := https://github.com/gbaraldi/cpufeatures.git
-CPUFEATURES_TAR_URL := https://github.com/gbaraldi/cpufeatures/archive/10a480bc161b8cca648777069184b9baf03a9410.tar.gz
-CPUFEATURES_SHA := 10a480bc161b8cca648777069184b9baf03a9410
+CPUFEATURES_TAR_URL := https://github.com/gbaraldi/cpufeatures/archive/fb4ea46bde2b0eea619014fb646550c1b29273bc.tar.gz
+CPUFEATURES_SHA := fb4ea46bde2b0eea619014fb646550c1b29273bc
