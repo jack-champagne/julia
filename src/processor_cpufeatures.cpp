@@ -427,18 +427,6 @@ static uint32_t sysimg_init_cb(void *ctx, const void *id, jl_value_t **rejection
     CF_DEBUG("[cpufeatures]   JIT target: name='%s' features=%s\n",
              target.name.c_str(), debug_feature_str(target.en.features).c_str());
 
-#if defined(_CPU_X86_64_)
-    // CX16 is required for 64-bit Julia (used by atomics).
-    // Check before sysimg matching so we get a clear error.
-    const FeatureEntry *cx16_fe = find_feature("cx16");
-    if (cx16_fe && !test_nbit(target.en.features, cx16_fe->bit)) {
-        jl_error("Your CPU does not support the CX16 instruction, which is required "
-                 "by this version of Julia!  This is often due to running inside of a "
-                 "virtualized environment.  Please read "
-                 "https://docs.julialang.org/en/v1/devdocs/sysimg/ for more.");
-    }
-#endif
-
     // Deserialize sysimage targets
     auto sysimg = deserialize_target_data<feature_sz>((const uint8_t *)id);
     CF_DEBUG("[cpufeatures]   sysimg has %zu target(s):\n", sysimg.size());
@@ -447,6 +435,26 @@ static uint32_t sysimg_init_cb(void *ctx, const void *id, jl_value_t **rejection
                  i, sysimg[i].name.c_str(), sysimg[i].en.flags,
                  debug_feature_str(sysimg[i].en.features).c_str());
     }
+
+#if defined(_CPU_X86_64_)
+    // CX16 (CMPXCHG16B) is required for 64-bit atomics.
+    // Only error if the sysimage was built assuming cx16 is available
+    // (i.e., all sysimage targets have cx16 enabled).
+    {
+        const FeatureEntry *cx16_fe = find_feature("cx16");
+        if (cx16_fe) {
+            bool sysimg_allows_no_cx16 = false;
+            for (auto &t : sysimg)
+                sysimg_allows_no_cx16 |= !test_nbit(t.en.features, cx16_fe->bit);
+            if (!sysimg_allows_no_cx16 && !test_nbit(target.en.features, cx16_fe->bit)) {
+                jl_error("Your CPU does not support the CX16 instruction, which is required "
+                         "by this version of Julia!  This is often due to running inside of a "
+                         "virtualized environment.  Please read "
+                         "https://docs.julialang.org/en/v1/devdocs/sysimg/ for more.");
+            }
+        }
+    }
+#endif
 
     // Match using the existing template function
     auto match = match_sysimg_targets(sysimg, target, max_vector_size, rejection_reason);
