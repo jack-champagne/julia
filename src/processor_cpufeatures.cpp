@@ -209,6 +209,16 @@ static TargetData<feature_sz> arg_target_data(const TargetData<feature_sz> &arg,
     expand_implied(&fb);
     featurebits_to_list(fb, res.en.features);
 
+#if defined(_CPU_X86_64_) || defined(_CPU_X86_)
+    // Mask features that LLVM doesn't use for codegen and that rr disables
+    // for deterministic record/replay.
+    static const char *masked_features[] = {"rdrnd", "rdseed", "rtm", "xsaveopt", nullptr};
+    for (const char **f = masked_features; *f; f++) {
+        const FeatureEntry *fe = find_feature(*f);
+        if (fe) unset_bits(res.en.features, fe->bit);
+    }
+#endif
+
     // Apply disabled features
     for (size_t i = 0; i < feature_sz; i++)
         res.en.features[i] &= ~res.dis.features[i];
@@ -416,6 +426,18 @@ static uint32_t sysimg_init_cb(void *ctx, const void *id, jl_value_t **rejection
 
     CF_DEBUG("[cpufeatures]   JIT target: name='%s' features=%s\n",
              target.name.c_str(), debug_feature_str(target.en.features).c_str());
+
+#if defined(_CPU_X86_64_)
+    // CX16 is required for 64-bit Julia (used by atomics).
+    // Check before sysimg matching so we get a clear error.
+    const FeatureEntry *cx16_fe = find_feature("cx16");
+    if (cx16_fe && !test_nbit(target.en.features, cx16_fe->bit)) {
+        jl_error("Your CPU does not support the CX16 instruction, which is required "
+                 "by this version of Julia!  This is often due to running inside of a "
+                 "virtualized environment.  Please read "
+                 "https://docs.julialang.org/en/v1/devdocs/sysimg/ for more.");
+    }
+#endif
 
     // Deserialize sysimage targets
     auto sysimg = deserialize_target_data<feature_sz>((const uint8_t *)id);
